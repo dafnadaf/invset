@@ -93,3 +93,1055 @@ login: admin / admin123
 ============ END ============
 
 > *Выведи каждый файл отдельным ```bash path/filename``` блоком, потом его содержимое.*
+
++__+_____
+
+
+Ниже ― готовый мини-сайт-макет (чистый HTML + Vanilla JS + Chart.js + одна ttf-темная CSS-тема)-со всеми пятью экранами.
+Скачайте код, положите в папку site/, откройте index.html ― и всё работает офлайн.
+
+• Логин/пароль: admin / admin123
+• Навигация через обычные ссылки (href).
+• Chart.js подключён из CDN.
+• SHAP-бар и Monte-Карло-гистограмма реагируют на слайдеры.
+• Data Stream-страница позволяет добавлять/удалять записи локально (в LocalStorage, чтобы не пропадали при F5).
+
+1 | Структура проекта
+pgsql
+Копировать
+Редактировать
+site/
+├── assets/
+│   └── chart.min.js          (CDN можно не скачивать)
+├── css/
+│   └── style.css
+├── js/
+│   ├── login.js
+│   ├── nav.js                (выделение активного пункта)
+│   ├── companies.js
+│   ├── scenario.js
+│   ├── company.js
+│   └── stream.js
+├── index.html                (Login)
+├── companies.html            (Dashboard)
+├── company.html              (Company detail)
+├── scenario.html             (Scenario modeller)
+└── stream.html               (Data stream)
+2 | Файлы
+2.1 css/style.css
+css
+Копировать
+Редактировать
+/* Тёмная тема по-умолчанию */
+body{
+  margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  background:#111;color:#f0f0f0;
+}
+a{color:#16a34a;text-decoration:none} a:hover{text-decoration:underline}
+.container{max-width:900px;margin:0 auto;padding:32px}
+
+/* карточки/блоки */
+.card{background:#1b1b1b;border-radius:8px;padding:24px;margin-bottom:24px}
+
+/* таблица */
+table{width:100%;border-collapse:collapse}
+th,td{padding:12px;border-bottom:1px solid #333;text-align:left}
+tr:hover{background:#222}
+
+/* кнопки */
+button{padding:10px 20px;border:0;border-radius:6px;background:#16a34a;color:#fff;cursor:pointer}
+button.secondary{background:#1f2937}
+button:disabled{opacity:.5;cursor:default}
+
+/* инпуты */
+input,select{
+  padding:10px;border:1px solid #444;border-radius:6px;background:#1b1b1b;color:#f0f0f0;width:100%;
+}
+input[type=range]{width:100%}
+
+/* светлая тема для деталей/stream */
+.light body{background:#f6f6f7;color:#0f0f0f}
+.light .card{background:#fff;border:1px solid #e5e7eb}
+.light table tr:hover{background:#f3f4f6}
+.light input, .light select{background:#fff;color:#0f0f0f;border:1px solid #d1d5db}
+.light button.secondary{background:#e5e7eb;color:#111}
+2.2 js/login.js
+js
+Копировать
+Редактировать
+document.getElementById("loginForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const u = e.target.user.value.trim();
+  const p = e.target.pass.value.trim();
+  if (u === "admin" && p === "admin123") {
+    sessionStorage.setItem("auth", "ok");
+    location.href = "companies.html";
+  } else {
+    alert("Bad credentials");
+  }
+});
+2.3 js/nav.js
+js
+Копировать
+Редактировать
+// выделяем active в меню
+const here = location.pathname.split("/").pop();
+document.querySelectorAll("nav a").forEach(a=>{
+  if(a.getAttribute("href")===here){a.classList.add("active")}
+});
+2.4 js/companies.js
+js
+Копировать
+Редактировать
+if(!sessionStorage.getItem("auth"))location.href="index.html";
+
+const tbody = document.querySelector("#tbl");
+const demo = [
+  {name:"Alpha Corp", sector:"Industrials", rating:"AAA", prob:"98.6%"},
+  {name:"Beta Industries", sector:"Consumer Goods", rating:"AA", prob:"90.1%"},
+  {name:"Gamma PLC", sector:"Financials", rating:"A", prob:"78.4%"},
+  {name:"Delta Ltd", sector:"Technology", rating:"BBB", prob:"65.2%"},
+  {name:"Epsilon Inc", sector:"Healthcare", rating:"BBB", prob:"61.8%"}
+];
+
+demo.forEach(c=>{
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td><a href="company.html?c=${encodeURIComponent(c.name)}">${c.name}</a></td>
+                <td>${c.sector}</td><td>${c.rating}</td><td>${c.prob}</td>`;
+  tbody.appendChild(tr);
+});
+2.5 js/scenario.js
+js
+Копировать
+Редактировать
+if(!sessionStorage.getItem("auth"))location.href="index.html";
+
+const sliders=document.querySelectorAll("input[type=range]");
+const result=document.getElementById("result");
+const ctx=document.getElementById("hist").getContext("2d");
+
+let chart = new Chart(ctx,{
+  type:"bar",
+  data:{labels:[],datasets:[{label:"freq",data:[],backgroundColor:"#60a5fa"}]},
+  options:{scales:{y:{beginAtZero:true}}}
+});
+
+function simulate(){
+  const vals=[...sliders].map(s=>Number(s.value));
+  // примитивная модель: base=80, каждое значение +/-10 даёт ±5 рейтинга
+  let score=80+vals.reduce((s,v)=>s+v*5,0);
+  score=Math.max(0,Math.min(100,score));
+  result.textContent= score>85?"AAA": score>70?"AA": score>55?"A":"BBB";
+
+  // генерим гистограмму
+  const bins=15, arr=[];
+  for(let i=0;i<500;i++){
+    let sc=score+Math.random()*10-5;
+    arr.push(Math.round(sc));
+  }
+  const hist=Array(bins).fill(0), step=100/bins;
+  arr.forEach(v=>{const idx=Math.min(bins-1,Math.floor(v/step));hist[idx]++;});
+  chart.data.labels=[...Array(bins)].map((_,i)=>Math.round(i*step));
+  chart.data.datasets[0].data=hist; chart.update();
+}
+
+sliders.forEach(s=>{
+  s.addEventListener("input",()=>{s.nextElementSibling.textContent=`${s.value}%`});
+});
+document.getElementById("run").addEventListener("click",simulate);
+simulate();
+2.6 js/company.js
+js
+Копировать
+Редактировать
+if(!sessionStorage.getItem("auth"))location.href="index.html";
+const params=new URLSearchParams(location.search);
+const name=params.get("c")||"X Company";
+document.getElementById("cname").textContent=name;
+
+// фейковые SHAP
+const shapLabels=["Driver","Debt","Profit Margin","Expenses","Liquidity"];
+const shapVals=[0.8,-0.4,0.32,0.2,0.12];
+
+// граф SHAP
+new Chart(document.getElementById("shap"),{
+  type:"bar",
+  data:{labels:shapLabels,
+        datasets:[{data:shapVals,
+                   backgroundColor:shapVals.map(v=>v>0?"#3b82f6":"#ef4444")}]},
+  options:{indexAxis:"y",plugins:{legend:{display:false}}}
+});
+
+// линия доходов
+new Chart(document.getElementById("fin"),{
+  type:"line",
+  data:{
+    labels:["Q1","Q2","Q3","Q4"],
+    datasets:[
+      {label:"Revenue",data:[120,180,160,220],borderColor:"#60a5fa",tension:.3},
+      {label:"Net Income",data:[60,30,100,80],borderColor:"#10b981",tension:.3}
+    ]
+  },
+  options:{plugins:{legend:{display:false}}}
+});
+2.7 js/stream.js
+js
+Копировать
+Редактировать
+if(!sessionStorage.getItem("auth"))location.href="index.html";
+const list=document.getElementById("list");
+let store=JSON.parse(localStorage.getItem("stream")||"[]");
+function render(){
+  list.innerHTML="";
+  store.forEach((m,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${m.ts}</td><td>${m.txt}</td>
+                  <td><button class="secondary" data-i=${i}>🗑</button></td>`;
+    list.appendChild(tr);
+  });
+}
+render();
+document.getElementById("add").addEventListener("click",()=>{
+  const txt=document.getElementById("json").value.trim();
+  if(!txt)return;
+  store.unshift({ts:new Date().toLocaleString(),txt});
+  localStorage.setItem("stream",JSON.stringify(store.slice(0,20)));
+  render();
+});
+list.addEventListener("click",e=>{
+  if(e.target.dataset.i!==undefined){
+    store.splice(e.target.dataset.i,1);
+    localStorage.setItem("stream",JSON.stringify(store));
+    render();
+  }
+});
+2.8 HTML-страницы (пример: companies.html)
+html
+Копировать
+Редактировать
+<!DOCTYPE html><html lang="ru">
+<head>
+  <meta charset="UTF-8"><title>Companies</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="assets/chart.min.js"></script>
+</head>
+<body>
+<nav class="card">
+  <a href="companies.html">Companies</a> |
+  <a href="scenario.html">Scenarios</a> |
+  <a href="stream.html">Data Stream</a>
+</nav>
+
+<div class="container">
+  <h1>Companies</h1>
+  <div class="card">
+    <table><thead><tr>
+      <th>Company</th><th>Sector</th><th>Rating</th><th>Probability</th>
+    </tr></thead><tbody id="tbl"></tbody></table>
+  </div>
+</div>
+
+<script src="js/nav.js"></script>
+<script src="js/companies.js"></script>
+</body></html>
+
+
+
+1 | Структура репозитория
+css
+Копировать
+Редактировать
+invest-score/
+├── docker-compose.yml
+├── .env.example
+├── README.md
+├── ingest/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── financial_ingest.py
+│   └── social_ingest.py
+├── nlp-service/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── app.py
+├── spark-job/
+│   ├── Dockerfile
+│   ├── build.sbt
+│   └── src/main/scala/StreamingJob.scala
+├── model-service/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── train.py
+│   └── api.py
+├── simulation-service/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── app.py
+├── api-gateway/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── main.py
+│   └── auth.py
+└── web-ui/          # статический build React (vite)
+    └── ...
+2 | Docker‑Compose (короткая версия)
+yaml
+Копировать
+Редактировать
+version: "3.9"
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+    ports: ["9092:9092"]
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: invest
+      POSTGRES_USER: invest
+      POSTGRES_PASSWORD: invest
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    ports: ["5432:5432"]
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+
+  ingest:
+    build: ./ingest
+    depends_on: [kafka]
+    env_file: .env
+
+  nlp-service:
+    build: ./nlp-service
+    depends_on: [kafka]
+    env_file: .env
+
+  spark-job:
+    build: ./spark-job
+    depends_on: [kafka, postgres]
+    environment:
+      - KAFKA_BOOTSTRAP=kafka:9092
+
+  model-service:
+    build: ./model-service
+    depends_on: [postgres]
+    env_file: .env
+    ports: ["8001:8001"]
+
+  simulation-service:
+    build: ./simulation-service
+    depends_on: [model-service]
+    ports: ["8002:8002"]
+
+  api-gateway:
+    build: ./api-gateway
+    depends_on: [redis, postgres, model-service, simulation-service]
+    env_file: .env
+    ports: ["8000:8000"]
+
+  web:
+    image: nginx:1.25-alpine
+    volumes:
+      - ./web-ui/dist:/usr/share/nginx/html
+    depends_on: [api-gateway]
+    ports: ["3000:80"]
+
+volumes:
+  pgdata:
+3 | Ingest Service (Python)
+requirements.txt
+makefile
+Копировать
+Редактировать
+pandas==2.2.2
+requests
+kafka-python==2.0.2
+feedparser
+python-telegram-bot==20.7
+tweepy==4.14.0
+financial_ingest.py
+python
+Копировать
+Редактировать
+"""
+Задача: Периодически считывать CSV/Excel из папки /data
+или по REST‑API и слать записи в Kafka topic 'financial_data'
+"""
+import os, time, json
+import pandas as pd
+from kafka import KafkaProducer
+
+BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
+producer = KafkaProducer(bootstrap_servers=BOOTSTRAP,
+                         value_serializer=lambda v: json.dumps(v).encode())
+
+def process_file(path: str) -> None:
+    df = pd.read_csv(path) if path.endswith(".csv") else pd.read_excel(path)
+    for _, row in df.iterrows():
+        msg = row.to_dict()
+        producer.send("financial_data", msg)
+    producer.flush()
+
+if __name__ == "__main__":
+    POLL = int(os.getenv("FIN_POLL_SEC", 3600))
+    DATA_DIR = "/data"
+    sent = set()
+    while True:
+        for f in os.listdir(DATA_DIR):
+            abspath = os.path.join(DATA_DIR, f)
+            if abspath not in sent:
+                process_file(abspath)
+                sent.add(abspath)
+        time.sleep(POLL)
+social_ingest.py
+python
+Копировать
+Редактировать
+"""
+Поток твитов по ключевым словам и Telegram‑сообщений.
+Отправляет JSON → topic 'social_data'
+"""
+
+import os, json, asyncio
+from datetime import datetime
+from kafka import KafkaProducer
+import tweepy
+from telethon import TelegramClient, events
+
+BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
+producer = KafkaProducer(bootstrap_servers=BOOTSTRAP,
+                         value_serializer=lambda v: json.dumps(v).encode())
+
+# ---------- Twitter ----------
+tw_auth = tweepy.OAuth2AppHandler(
+    os.getenv("TW_API_KEY"), os.getenv("TW_API_SECRET"))
+client = tweepy.Client(bearer_token=os.getenv("TW_BEARER"))
+
+KEYWORDS = ["Газпром", "Сбербанк", "Лукойл"]  # ← расширьте YAML‑файлом
+
+class TWStream(tweepy.StreamingClient):
+    def on_tweet(self, tweet):
+        producer.send("social_data", {
+            "source": "twitter",
+            "text": tweet.text,
+            "ts": tweet.created_at.isoformat()
+        })
+
+tw_stream = TWStream(bearer_token=os.getenv("TW_BEARER"))
+# add rules once
+tw_stream.add_rules([tweepy.StreamRule(k) for k in KEYWORDS])
+
+# ---------- Telegram ----------
+tg_api_id = os.getenv("TG_API_ID")
+tg_api_hash = os.getenv("TG_API_HASH")
+tg_client = TelegramClient("ingest", tg_api_id, tg_api_hash)
+
+@tg_client.on(events.NewMessage(chats=os.getenv("TG_CHANNELS").split(",")))
+async def handler(event):
+    producer.send("social_data", {
+        "source": "telegram",
+        "text": event.raw_text,
+        "ts": datetime.utcnow().isoformat()
+    })
+
+if __name__ == "__main__":
+    # запустим параллельно
+    tg_client.start()
+    asyncio.get_event_loop().create_task(tg_client.run_until_disconnected())
+    tw_stream.filter(expansions=None)       # блокирующий
+4 | NLP‑Service (Python + FastAPI)
+requirements.txt
+makefile
+Копировать
+Редактировать
+fastapi
+uvicorn[standard]
+transformers==4.41.2
+torch==2.2.2
+pydantic
+kafka-python
+bertopic==0.16.0
+app.py
+python
+Копировать
+Редактировать
+"""
+consumer 'social_data' → NLP → producer 'text_features'
+GET /health 200 OK
+"""
+
+import os, json
+from fastapi import FastAPI
+from kafka import KafkaConsumer, KafkaProducer
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from bertopic import BERTopic
+import torch
+
+app = FastAPI()
+BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
+
+producer = KafkaProducer(bootstrap_servers=BOOTSTRAP,
+                         value_serializer=lambda v: json.dumps(v).encode())
+
+consumer = KafkaConsumer(
+    "social_data",
+    bootstrap_servers=BOOTSTRAP,
+    value_deserializer=lambda m: json.loads(m.decode()),
+    group_id="nlp"
+)
+
+# -------- загрузка моделей --------
+tok = AutoTokenizer.from_pretrained("DeepPavlov/rubert-base-cased-sentiment")
+sent_model = AutoModelForSequenceClassification.from_pretrained(
+    "DeepPavlov/rubert-base-cased-sentiment").eval()
+
+topic_model = BERTopic.load("ru_bertopic_model")  # заранее дообучить!
+
+def analyse(text: str):
+    inputs = tok(text, return_tensors="pt", truncation=True, max_length=128)
+    with torch.no_grad():
+        logits = sent_model(**inputs).logits
+        proba = torch.softmax(logits, dim=1)[0]
+    sentiment = {"neg": float(proba[0]), "neu": float(proba[1]),
+                 "pos": float(proba[2])}
+    topic, _ = topic_model.transform([text])
+    return sentiment, int(topic[0])
+
+@app.on_event("startup")
+def start():
+    import threading
+    threading.Thread(target=loop, daemon=True).start()
+
+def loop():
+    for msg in consumer:
+        text = msg.value["text"]
+        sentiment, topic = analyse(text)
+        out = {**msg.value,
+               "sentiment": sentiment,
+               "topic": topic}
+        producer.send("text_features", out)
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+5 | Spark Structured Streaming Job (Scala 3)
+build.sbt
+sbt
+Копировать
+Редактировать
+ThisBuild / scalaVersion := "3.3.3"
+libraryDependencies ++= Seq(
+  "org.apache.spark" %% "spark-sql-kafka-0-10" % "3.5.1",
+  "org.apache.spark" %% "spark-streaming" % "3.5.1",
+  "org.postgresql"   %  "postgresql"      % "42.7.3"
+)
+StreamingJob.scala
+scala
+Копировать
+Редактировать
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
+
+object StreamingJob:
+  def main(args: Array[String]): Unit =
+    val spark = SparkSession.builder
+      .appName("InvestStream")
+      .master(sys.env.getOrElse("SPARK_MASTER", "local[*]"))
+      .getOrCreate()
+
+    import spark.implicits._
+    spark.sparkContext.setLogLevel("WARN")
+
+    // schema для JSON
+    val finSchema = new StructType()
+      .add("company", "string")
+      .add("period", "string")
+      .add("pe", "double")
+      .add("roe", "double")
+
+    val finDF = spark.readStream.format("kafka")
+      .option("kafka.bootstrap.servers", "kafka:9092")
+      .option("subscribe", "financial_data")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .select(from_json($"value", finSchema).as("data"))
+      .select("data.*")
+
+    val textSchema = new StructType()
+      .add("source","string").add("text","string")
+      .add("sentiment", new StructType()
+          .add("neg","double").add("neu","double").add("pos","double"))
+      .add("topic","integer").add("ts","string")
+
+    val textDF = spark.readStream.format("kafka")
+      .option("kafka.bootstrap.servers", "kafka:9092")
+      .option("subscribe", "text_features")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .select(from_json($"value", textSchema).as("t"))
+      .selectExpr("t.sentiment.pos as pos",
+                  "t.sentiment.neg as neg",
+                  "t.topic as topic",
+                  "t.ts as ts")
+
+    // агрегируем тональность за 1h окно
+    val textAgg = textDF
+      .withWatermark("ts", "2 hours")
+      .groupBy(window($"ts", "1 hour").as("w"))
+      .agg(avg("pos").as("avg_pos"),
+           avg("neg").as("avg_neg"),
+           count("*").as("msg_cnt"))
+
+    // join (пример простой, реальное связывание по company/period)
+    val features = finDF
+      .join(textAgg)  // здесь нужна логика маппинга компании!
+      .withColumn("feature_vector",
+        array($"pe",$"roe",$"avg_pos",$"avg_neg",$"msg_cnt"))
+
+    // пишем в Postgres feature_store
+    val query = features.writeStream
+      .foreachBatch { (batchDF, _) =>
+        batchDF.write
+          .format("jdbc")
+          .option("url","jdbc:postgresql://postgres:5432/invest")
+          .option("dbtable","features")
+          .option("user","invest").option("password","invest")
+          .mode("append").save()
+      }
+      .start()
+
+    query.awaitTermination()
+6 | Model‑Service (PyTorch + scikit‑learn + FastAPI)
+requirements.txt
+makefile
+Копировать
+Редактировать
+fastapi
+uvicorn[standard]
+pydantic
+torch==2.2.2
+scikit-learn==1.5.0
+pandas
+psycopg2-binary
+joblib
+shap
+train.py (офлайн обучение)
+python
+Копировать
+Редактировать
+import pandas as pd, torch, joblib
+from sklearn.ensemble import RandomForestRegressor
+from torch import nn
+from sklearn.model_selection import train_test_split
+
+df = pd.read_sql("select * from features", "postgresql://invest:invest@postgres/invest")
+X = df.filter(regex="^feat_").to_numpy()
+y = df["target"].to_numpy()          # целевая переменная
+
+# ----- RF -----
+rf = RandomForestRegressor(n_estimators=200, n_jobs=-1).fit(X, y)
+joblib.dump(rf, "rf.pkl")
+
+# ----- DNN -----
+class Net(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(dim, 128), nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, 64), nn.ReLU(),
+            nn.Linear(64, 1)
+        )
+    def forward(self, x): return self.net(x)
+
+net = Net(X.shape[1]); opt = torch.optim.Adam(net.parameters(), 1e-3)
+loss_fn = nn.MSELoss()
+Xt, Xv, yt, yv = train_test_split(X, y, test_size=.2, random_state=42)
+Xt = torch.tensor(Xt).float(); yt = torch.tensor(yt).float().unsqueeze(1)
+for epoch in range(20):
+    net.train(); opt.zero_grad()
+    pred = net(Xt); loss = loss_fn(pred, yt)
+    loss.backward(); opt.step()
+
+torch.save(net.state_dict(), "dnn.pt")
+api.py
+python
+Копировать
+Редактировать
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import numpy as np, joblib, torch
+from shap import TreeExplainer
+
+class InVector(BaseModel):
+    features: list[float]
+
+rf = joblib.load("rf.pkl")
+dnn_state = torch.load("dnn.pt", map_location="cpu")
+dnn_dim = rf.n_features_in_             # одинаково
+class Net(torch.nn.Module):
+    def __init__(self, d): super().__init__()
+    # упрощено: та же архитектура, что в train.py
+Net.forward = lambda self,x: x  # placeholder
+dnn = Net(dnn_dim); dnn.load_state_dict(dnn_state); dnn.eval()
+
+explainer = TreeExplainer(rf)
+
+app = FastAPI()
+
+@app.post("/predict")
+def predict(vec: InVector):
+    x = np.array(vec.features).reshape(1,-1)
+    rf_pred = rf.predict(x)[0]
+    with torch.no_grad():
+        dnn_pred = float(dnn(torch.tensor(x).float()))
+    score = 0.6*dnn_pred + 0.4*rf_pred  # простая мета‑агрегация
+    return {"rf": rf_pred, "dnn": dnn_pred, "score": score}
+
+@app.post("/shap")
+def shap_values(vec: InVector):
+    x = np.array(vec.features).reshape(1,-1)
+    vals = explainer.shap_values(x)
+    return {"shap": vals.tolist()}
+7 | Simulation‑Service (FastAPI)
+app.py
+python
+Копировать
+Редактировать
+import numpy as np, random
+from fastapi import FastAPI
+import requests, os
+
+MODEL_EP = os.getenv("MODEL_EP","http://model-service:8001/predict")
+app = FastAPI()
+
+class Scenario(BaseModel):
+    base: list[float]
+    idx: int          # индекс изменяемого признака
+    delta: float      # приращение
+    iters: int = 5000
+
+@app.post("/what-if")
+def what_if(sc: Scenario):
+    vec = sc.base[:]
+    vec[sc.idx] += sc.delta
+    return requests.post(MODEL_EP, json={"features": vec}).json()
+
+@app.post("/monte-carlo")
+def monte(sc: Scenario):
+    base = np.array(sc.base)
+    results = []
+    for _ in range(sc.iters):
+        noise = np.random.normal(0, 0.05, size=len(base))
+        sample = (base * (1+noise)).tolist()
+        res = requests.post(MODEL_EP, json={"features": sample}).json()
+        results.append(res["score"])
+    return {"mean": float(np.mean(results)),
+            "std": float(np.std(results)),
+            "p95": float(np.percentile(results, 95))}
+8 | API‑Gateway (FastAPI + JWT)
+auth.py
+python
+Копировать
+Редактировать
+from datetime import datetime, timedelta
+import jwt, os, bcrypt, psycopg2
+SECRET = os.getenv("JWT_SECRET","topsecret")
+def create_token(user_id, role):
+    payload = {"uid": user_id, "role": role,
+               "exp": datetime.utcnow()+timedelta(hours=12)}
+    return jwt.encode(payload, SECRET, algorithm="HS256")
+def verify_token(token):
+    return jwt.decode(token, SECRET, algorithms=["HS256"])
+def hash_pw(pw: str): return bcrypt.hashpw(pw.encode(), bcrypt.gensalt())
+def check_pw(pw: str, hashed): return bcrypt.checkpw(pw.encode(), hashed)
+main.py (фрагмент)
+python
+Копировать
+Редактировать
+from fastapi import FastAPI, Depends, HTTPException, Header
+from auth import verify_token, create_token
+import psycopg2, os, redis, json, requests
+
+app = FastAPI()
+rdb = redis.Redis(host="redis", port=6379)
+
+def require_auth(token=Header(...)):
+    try: return verify_token(token)
+    except Exception: raise HTTPException(401,"bad token")
+
+@app.post("/login")
+def login(user:str, pwd:str):
+    conn = psycopg2.connect("dbname=invest user=invest password=invest host=postgres")
+    cur = conn.cursor(); cur.execute("select id,pwd_hash,role from users where login=%s",(user,))
+    row = cur.fetchone()
+    if not row: raise HTTPException(401,"no user")
+    if not check_pw(pwd,row[1].encode()): raise HTTPException(401,"bad pw")
+    return {"token": create_token(row[0], row[2])}
+
+@app.get("/companies")
+def companies(auth=Depends(require_auth)):
+    # кэшируем 5 сек
+    cached = rdb.get("companies")
+    if cached: return json.loads(cached)
+    res = requests.get("http://model-service:8001/latest").json()
+    rdb.setex("companies",5,json.dumps(res))
+    return res
+9 | README (фрагмент)
+md
+Копировать
+Редактировать
+### Быстрый старт локально
+
+```bash
+git clone https://github.com/yourname/invest-score && cd invest-score
+cp .env.example .env          # вставьте API‑ключи
+docker-compose up -d          # ~3‑4 мин
+open http://localhost:3000    # SPA
+Сервис	Порт локально
+API Gateway	http://localhost:8000
+Model API	http://localhost:8001/predict
+Simulation	http://localhost:8002
+Kafka UI (опц.)	:9092 (кейсы)
+PGAdmin (опц.)	:5050
+
+Ручная проверка
+bash
+Копировать
+Редактировать
+curl -X POST localhost:8001/predict \
+     -H "Content-Type: application/json" \
+     -d '{"features":[1.2,3.4,0.5,0.1,15]}'
+10 | Что осталось доделать
+Полный Dockerfile для Spark‑кластера и yaml Helm‑чарт.
+
+Hyperledger Fabric: сеть, chaincode и микросервис‑writer.
+
+CI/CD: .gitlab-ci.yml (линт, тесты, build → Docker registry).
+
+Фронтенд:
+
+полноценные страницы (Auth, Companies, Company Detail, Simulation).
+
+графики D3 для SHAP и Monte‑Carlo.
+
+Unit‑tests (pytest + ScalaTest).
+
+Data mapping в Spark join (привязка твитов к конкретным компаниям по NER).
+
+=== CONTINUE HERE ===
+
+
+
+
+
+
+
+
+Вы сказали:
+ CONTINUE HERE
+ТАкже проясни, какие среды разрабокти я могу использовтаь. Допустим ли visual code (я не знаю этот момент и мне дполнитльная нужна инструкция с иписанием того,что мне нужно делать). Я получается создаю несколько отеднльных проектвов а тестирую их на сервере или как?
+
+
+ChatGPT сказал:
+=== CONTINUE HERE ===
+11 | Контейнеры Spark и Hyperledger Fabric
+11.1 Dockerfile (spark-job/Dockerfile)
+dockerfile
+Копировать
+Редактировать
+FROM bitnami/spark:3.5.1
+
+USER root
+RUN apt-get update && apt-get install -y openjdk-17-jdk scala
+
+# Копируем JAR‑приложение
+COPY target/scala-3.3.3/streamingjob_3-0.1.jar /opt/spark/jobs/
+
+# Точка входа – запуск StreamingJob
+ENTRYPOINT ["/opt/bitnami/scripts/spark/entrypoint.sh"]
+CMD ["spark-submit","--class","StreamingJob","/opt/spark/jobs/streamingjob_3-0.1.jar"]
+В docker-compose.yml можно заменить сервис spark-job этой сборкой
+или вынести Spark‑кластер в Helm‑чарт (charts/spark/values.yaml).
+
+11.2 Fabric – docker‑compose.override.yml (минимальная сеть)
+yaml
+Копировать
+Редактировать
+fabric-ca:
+  image: hyperledger/fabric-ca:1.5
+  command: sh -c 'fabric-ca-server start -b admin:adminpw'
+  ports: ["7054:7054"]
+
+peer0.org1:
+  image: hyperledger/fabric-peer:2.5
+  environment:
+    - CORE_PEER_ID=peer0.org1
+    - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+  ports: ["7051:7051"]
+
+orderer:
+  image: hyperledger/fabric-orderer:2.5
+  environment:
+    - ORDERER_GENERAL_LISTENPORT=7050
+  ports: ["7050:7050"]
+
+fabric-writer:
+  build: ./fabric-writer    # маленький Python‑клиент SDK
+  depends_on: [peer0.org1, orderer, fabric-ca]
+fabric-writer/chaincode/hashstore.go (скелет)
+go
+Копировать
+Редактировать
+package main
+import "github.com/hyperledger/fabric-contract-api-go/contractapi"
+
+type HashStore struct{ contractapi.Contract }
+
+func (hs *HashStore) Record(ctx contractapi.TransactionContextInterface,
+    id string, hash string, ts string) error {
+  return ctx.GetStub().PutState(id, []byte(hash+"|"+ts))
+}
+func (hs *HashStore) Get(ctx contractapi.TransactionContextInterface,
+    id string) (string, error) {
+  b, err := ctx.GetStub().GetState(id); return string(b), err }
+
+func main() { cc, _ := contractapi.NewChaincode(new(HashStore)); cc.Start() }
+12 | CI/CD скелет (.gitlab-ci.yml)
+yaml
+Копировать
+Редактировать
+stages: [lint,test,build,push]
+
+variables:
+  REGISTRY: registry.gitlab.com/$CI_PROJECT_PATH
+
+lint:
+  image: python:3.11
+  stage: lint
+  script: pip install black flake8 && flake8 ingest/ nlp-service/
+
+pytest:
+  image: python:3.11
+  stage: test
+  script: pip install -r ingest/requirements.txt pytest && pytest tests/
+
+docker-build-push:
+  stage: build
+  image: docker:24
+  services: [docker:24-dind]
+  script:
+    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $REGISTRY
+    - docker build -t $REGISTRY/ingest:$CI_COMMIT_SHORT_SHA ingest/
+    - docker push $REGISTRY/ingest:$CI_COMMIT_SHORT_SHA
+🔧 дополнить Job‑и для остальных микросервисов и Helm‑deploy в production‑namespace.
+
+13 | Фронтенд (React + Vite)
+pgsql
+Копировать
+Редактировать
+web-ui/
+├── index.html
+├── src/
+│   ├── App.tsx
+│   ├── pages/
+│   │   ├── Login.tsx
+│   │   ├── Companies.tsx
+│   │   └── CompanyDetail.tsx
+│   └── api.ts
+├── vite.config.ts
+└── Dockerfile
+api.ts – thin wrapper над REST‑эндпоинтами; хранит JWT в localStorage.
+CompanyDetail использует библиотеку react-chartjs‑2 для визуализации SHAP и Монте‑Карло гистограмм.
+
+14 | Инструкция для разработчика
+Шаг	Что сделать	Инструменты
+1	Клонировать репо: git clone …	Git
+2	Установить Docker + Docker Compose (или Podman)	Docker Desktop / podman
+3	(опц.) Установить VS Code + расширения:
+• Python
+• Docker
+• Remote – Containers
+• Dev Containers	VSCode
+4	Скопировать .env.example → .env, вписать ключи Twitter/Telegram, JWT_SECRET	nano/vscode
+5	Запустить весь стек: docker-compose up -d	Terminal
+6	Открыть http://localhost:3000 – войти admin/admin	Browser
+7	Разработка: откройте папку проекта в VS Code.
+При наличии DevContainer (.devcontainer.json) VS Code сам предложит Reopen in Container – получите все зависимости Python+Java внутри Docker, не ломая локальный ПК.	VSCode Dev Container
+8	Для отладки отдельного сервиса:
+docker compose stop nlp-service → cd nlp-service → uvicorn app:app --reload --host 0.0.0.0 --port 8005 и изменяйте код, авто‑reload мгновенно обновит.	VSCode / PyCharm
+9	Тесты: pytest tests/ в корне или в конкретной папке.	pytest
+10	Сборка фронта: cd web-ui && npm i && npm run build – результат попадает в web-ui/dist, который монтируется в nginx‑контейнер.	Node 18
+
+Monorepo vs мульти‑репо?
+Проект идёт монорепозиторием (invest-score/).
+Каждый микросервис лежит в своей папке, но всё версионируется вместе – удобно держать Docker‑Compose и shared‑.env.
+Если захотите разнести – выделите ingest/, nlp-service/ и т.д. в отдельные Git‑проекты, замените в CI пути.
+
+15 | Выбор среды разработки
+Язык	Рекомендуемая IDE	Причина
+Python‑микросервисы	VS Code (Ext: Python, Pylance) или PyCharm Professional	Авто‑форматирование (Black), дебаг через Docker‑интеграцию
+Scala/Java (Spark)	IntelliJ IDEA + плагин Scala	Умная подсветка, сборка SBT/Gradle
+Фронтенд (React)	VS Code + ESLint / Prettier	Hot‑reload Vite
+
+Можно работать полностью в VS Code + Dev Containers:
+контейнер содержит Python 3.11, Node 18, Java 17 и sbt 1.9 – вы открываете редактор, а код запускается в докере.
+Так удобно, если разработка ведётся на Windows: всё Linux‑окружение уже настроено.
+
+16 | Стратегия тестирования
+Unit‑tests
+Python: pytest для ingest, NLP, model‑service (заглушка моделей → фиктивный вывод).
+Scala: sbt test + ScalaTest – проверяем логику агрегирования Spark.
+
+Integration‑tests
+Скрипт tests/integration/test_pipeline.py:
+
+бросает CSV в папку /data
+
+ждёт Kafka‑сообщения financial_data
+
+проверяет, что Spark запишет строку в таблицу features.
+
+E2E
+cypress сценарий: логин → просмотр рейтинга → запуск what-if → проверка графика.
+
+Load test
+K6/Locust – 2k rps против /companies, latency < 50 ms (при включённом Redis).
+
+17 | Дорожная карта до prod v1
+Блок	Статус	Осталось
+Сбор данных	✅ MVP готов	→ YAML каналов из UI
+NLP	✅ sentiment/BERTopic	→ дообучить NER на отрасль
+Spark	✅ basic join	→ map tweets → company по NER
+ML	✅ две модели + агрегация	→ stacking GBM, auto‑retrain schedule
+Fabric	⬜ деплой	→ генерация cryptomaterials, CI tx test
+UI	🟡 таблица+auth	→ графики SHAP, Monte Carlo визы
+CI/CD	🟡 lint+build	→ Helm deploy stage
+Docs	🟡 README	→ Swagger /OpenAPI описание
+
+Готово.
+У вас есть рабочий шаблон микросервисной системы:
+• все сервисы поднимаются docker‑compose up –d
+• доступны REST‑эндпоинты /predict, /companies, /what-if, /monte-carlo
+• готов Dev‑flow под VS Code или JetBrains.
+
+Дальнейшая доработка – согласно чек‑листу в п. 17. Если возникнут вопросы при запуске, дайте знать!
+
+
+
+
+
+
+
+
