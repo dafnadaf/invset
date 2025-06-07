@@ -1,0 +1,95 @@
+# ========= ЗАДАНИЕ ДЛЯ CODEX =========
+**Цель:** сгенерировать КАРКАС микросервисной системы «Invest-Score».
+Реализуй только базовую структуру, заглушки и точки расширения (no business-logic).
+Файлы должны сразу запускаться (`docker-compose up -d` → 200 OK), но
+все сложные места (Spark, Fabric, ML) оставь как TODO-заглушки.
+
+## 0. Стек
+* Backend: Python 3.11, FastAPI
+* Frontend: чистый HTML + Vanilla JS (index.html ↔ few pages)
+* Брокер: Kafka (Confluent image)
+* DB: PostgreSQL + Redis
+* Dev-инфраструктура: Docker Compose
+
+## 1. Дерево проекта
+```
+invest-score/
+ ├ docker-compose.yml
+ ├ README.md
+ ├ backend/
+ │   ├ api-gateway/
+ │   │   ├ app.py        # FastAPI gateway (auth, routing)
+ │   │   └ requirements.txt
+ │   ├ ingest/
+ │   │   ├ financial_ingest.py
+ │   │   ├ social_ingest.py
+ │   │   └ requirements.txt
+ │   ├ model-service/
+ │   │   ├ api.py        # FastAPI: /predict, /shap
+ │   │   ├ train.py      # TODO placeholder
+ │   │   └ requirements.txt
+ │   └ simulation-service/
+ │       ├ app.py        # FastAPI: /what-if, /monte-carlo
+ │       └ requirements.txt
+ ├ frontend/
+ │   ├ index.html        # login
+ │   ├ companies.html    # table-заглушка
+ │   ├ company.html      # SHAP / графики
+ │   ├ scenario.html     # sliders + histogram
+ │   └ stream.html       # live data
+ ├ css/style.css
+ └ js/ (login.js, nav.js, companies.js, ...)
+```
+
+## 2. Требования к каждому сервису
+* **FastAPI** должен возвращать `/health` 200 OK.
+* В `requirements.txt` прописать минимальные зависимости.
+* Внутри кода добавить `TODO:` комментарии, где будет реальная логика.
+* Все переменные окружения читать через `os.getenv` (должны совпасть с docker-compose).
+
+## 3. docker-compose.yml
+* Zookeeper + Kafka (confluentinc/cp-kafka:7.5)
+* postgres:15, redis:7
+* build контекст на каждый сервис (backend/*)
+* том `pgdata` (named volume)
+* сети: default bridge
+* для gateway пробросить порт 8000; для статического nginx — 3000
+
+## 4. Backend детали
+### 4.1 api-gateway/app.py
+```python
+# FastAPI, auth = login/password "admin"/"admin123"
+# JWT на HS256, SECRET = os.getenv("JWT_SECRET","devsecret")
+# эндпоинты: POST /login, GET /companies (заглушка), WS /ws/ratings (echo)
+```
+### 4.2 ingest/*
+* financial_ingest.py: каждые 60 с читает /data/*.csv и шлёт JSON в Kafka topic `financial_data`.
+* social_ingest.py: имитирует поток; каждый 10 с публикует фейковый твит в topic `social_data`.
+
+### 4.3 model-service/api.py
+* `POST /predict` — принимает `{features:[numbers...]}` → возвращает fixed `"score": 75`.
+* `POST /shap` — возвращает dummy массив из 5 SHAP значений.
+
+### 4.4 simulation-service/app.py
+* `/what-if` — echo `{score: 80}`
+* `/monte-carlo` — генерирует 500 случ. чисел вокруг 75, возвращает mean, std, hist[10].
+
+## 5. Frontend (Vanilla JS)
+* подключить Chart.js из CDN.
+* companies.html — генерирует таблицу из 5 захардкоженных записей.
+* scenario.html — 3 range-slider, кнопка «simulate» → рисует гистограмму.
+* company.html — SHAP bar + line chart (рандомные точки).
+* stream.html — textarea + button «NEW RECORD» → пишет в LocalStorage и отображает.
+
+## 6. README.md
+Включи:
+```
+### Quick Start
+docker-compose up -d
+open http://localhost:3000
+login: admin / admin123
+```
+
+============ END ============
+
+> *Выведи каждый файл отдельным ```bash path/filename``` блоком, потом его содержимое.*
