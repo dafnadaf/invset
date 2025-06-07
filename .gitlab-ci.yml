@@ -1,0 +1,38 @@
+stages: [lint, test, build, push]
+
+variables:
+  REGISTRY: registry.gitlab.com/$CI_PROJECT_PATH
+
+lint:
+  image: python:3.11
+  stage: lint
+  script:
+    - pip install black flake8
+    - flake8 backend/api-gateway backend/ingest backend/nlp-service backend/model-service backend/simulation-service
+
+pytest:
+  image: python:3.11
+  stage: test
+  script:
+    - pip install -r backend/ingest/requirements.txt pytest
+    - pytest tests/
+
+docker-build-push:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $REGISTRY
+    - docker build -t $REGISTRY/ingest:$CI_COMMIT_SHORT_SHA backend/ingest
+    - docker push $REGISTRY/ingest:$CI_COMMIT_SHORT_SHA
+    - docker build -t $REGISTRY/api-gateway:$CI_COMMIT_SHORT_SHA backend/api-gateway
+    - docker push $REGISTRY/api-gateway:$CI_COMMIT_SHORT_SHA
+    - docker build -t $REGISTRY/nlp-service:$CI_COMMIT_SHORT_SHA backend/nlp-service
+    - docker push $REGISTRY/nlp-service:$CI_COMMIT_SHORT_SHA
+    - docker build -t $REGISTRY/model-service:$CI_COMMIT_SHORT_SHA backend/model-service
+    - docker push $REGISTRY/model-service:$CI_COMMIT_SHORT_SHA
+    - docker build -t $REGISTRY/simulation-service:$CI_COMMIT_SHORT_SHA backend/simulation-service
+    - docker push $REGISTRY/simulation-service:$CI_COMMIT_SHORT_SHA
+
+# TODO: add Helm deploy in production namespace

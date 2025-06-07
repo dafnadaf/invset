@@ -1,0 +1,25 @@
+<!DOCTYPE html><html lang="ru">
+<head>
+  <meta charset="UTF-8"><title>Scenario</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="light">
+<nav class="card">
+  <a href="companies.html">Companies</a> |
+  <a href="scenario.html">Scenarios</a> |
+  <a href="stream.html">Data Stream</a>
+</nav>
+<div class="container">
+  <h1>Scenario Modeller</h1>
+  <div class="card">
+    <label>Driver A <input type="range" value="0" min="-10" max="10"><span>0%</span></label><br>
+    <label>Driver B <input type="range" value="0" min="-10" max="10"><span>0%</span></label><br>
+    <label>Driver C <input type="range" value="0" min="-10" max="10"><span>0%</span></label><br>
+    <button id="run">simulate</button> <b id="result"></b>
+    <canvas id="hist" height="200"></canvas>
+  </div>
+</div>
+<script src="../js/nav.js"></script>
+<script src="../js/scenario.js"></script>
+</body></html>
