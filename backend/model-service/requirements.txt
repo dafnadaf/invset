@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+torch==2.2.2
+scikit-learn==1.5.0
+pandas
+psycopg2-binary
+joblib
+shap
